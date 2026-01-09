@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Creative-Hub Media App - WORKING</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #1877f2; }
+        input, textarea, button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        button {
+            background: #1877f2;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background: #166fe5; }
+        button.secondary {
+            background: #42b72a;
+        }
+        button.secondary:hover { background: #36a420; }
+        .hidden { display: none; }
+        .post {
+            background: #fff;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #e4e6eb;
+        }
+        .post-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .post-header strong {
+            margin-left: 10px;
+            color: #050505;
+        }
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .error { background: #ffe6e6; color: #ff4444; }
+        .success { background: #e6ffe6; color: #42b72a; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Auth Section -->
+        <div id="authSection">
+            <h1>Welcome to Creative-hub Social App ChatNow</h1>
+            <input type="email" id="email" placeholder="Email">
+            <input type="password" id="password" placeholder="Password">
+            <input type="text" id="displayName" placeholder="Display Name (for register)">
+            <button onclick="login()">Login</button>
+            <button onclick="register()" class="secondary">Register</button>
+            <div id="authMessage"></div>
+        </div>
+
+        <!-- App Section -->
+        <div id="appSection" class="hidden">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h1>Creative-Hub-App</h1>
+                <div>
+                    <span id="userGreeting"></span>
+                    <button onclick="logout()" style="width: auto; margin-left: 20px;">Logout</button>
+                </div>
+            </div>
+
+            <!-- Create Post -->
+            <div style="margin: 30px 0;">
+                <h3>Create a Post</h3>
+                <textarea id="postContent" rows="3" placeholder="What's on your mind?"></textarea>
+                <button onclick="createPost()">Post</button>
+            </div>
+
+            <!-- Posts Feed -->
+            <h3>Recent Posts</h3>
+            <div id="postsContainer"></div>
+        </div>
+    </div>
+
+    <!-- FIREBASE SDK VERSION 8 (Most stable) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    
+    <script>
+        // Your Firebase configuration
+        const firebaseConfig = {
+apiKey: "AIzaSyCzvGo2U1uTdkhfsymQIRz5gDqmj5bpdCQ",
+    authDomain: "creative-243ef.firebaseapp.com",
+    projectId: "creative-243ef",
+    storageBucket: "creative-243ef.firebasestorage.app",
+    messagingSenderId: "835772314196",
+    appId: "1:835772314196:web:c82c410cfa0b13188733c1"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        console.log("Firebase initialized successfully!");
+
+        // Show message function
+        function showMessage(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="message ${isError ? 'error' : 'success'}">${message}</div>`;
+            setTimeout(() => {
+                element.innerHTML = '';
+            }, 3000);
+        }
+
+        // Login
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            if (!email || !password) {
+                showMessage('authMessage', 'Please fill in all fields', true);
+                return;
+            }
+            
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+                showMessage('authMessage', 'Login successful!');
+            } catch (error) {
+                showMessage('authMessage', 'Error: ' + error.message, true);
+            }
+        }
+
+        // Register
+        async function register() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const displayName = document.getElementById('displayName').value;
+            
+            if (!email || !password || !displayName) {
+                showMessage('authMessage', 'Please fill in all fields', true);
+                return;
+            }
+            
+            try {
+                // Create auth user
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Update display name
+                await user.updateProfile({
+                    displayName: displayName
+                });
+                
+                // Create user document in Firestore
+                await db.collection('users').doc(user.uid).set({
+                    displayName: displayName,
+                    email: email,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    uid: user.uid
+                });
+                
+                showMessage('authMessage', 'Registration successful!');
+            } catch (error) {
+                showMessage('authMessage', 'Error: ' + error.message, true);
+            }
+        }
+
+        // Logout
+        async function logout() {
+            try {
+                await auth.signOut();
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+
+        // Create Post
+        async function createPost() {
+            const user = auth.currentUser;
+            const content = document.getElementById('postContent').value;
+            
+            if (!content.trim()) {
+                alert('Please enter some content');
+                return;
+            }
+            
+            try {
+                await db.collection('posts').add({
+                    authorId: user.uid,
+                    authorName: user.displayName,
+                    content: content,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    likes: 0
+                });
+                
+                document.getElementById('postContent').value = '';
+                loadPosts();
+            } catch (error) {
+                console.error('Error creating post:', error);
+            }
+        }
+
+        // Load Posts
+        async function loadPosts() {
+            try {
+                const postsContainer = document.getElementById('postsContainer');
+                const querySnapshot = await db.collection('posts')
+                    .orderBy('createdAt', 'desc')
+                    .limit(20)
+                    .get();
+                
+                postsContainer.innerHTML = '';
+                
+                querySnapshot.forEach((doc) => {
+                    const post = doc.data();
+                    const postElement = document.createElement('div');
+                    postElement.className = 'post';
+                    
+                    // Format date
+                    let postDate = 'Recently';
+                    if (post.createdAt && post.createdAt.toDate) {
+                        postDate = post.createdAt.toDate().toLocaleString();
+                    }
+                    
+                    postElement.innerHTML = `
+                        <div class="post-header">
+                            <strong>${post.authorName || 'Anonymous'}</strong>
+                            <small style="margin-left: auto; color: #65676b;">${postDate}</small>
+                        </div>
+                        <p>${post.content}</p>
+                        <div>
+                            <button onclick="likePost('${doc.id}', ${post.likes || 0})" style="width: auto;">
+                                👍 ${post.likes || 0} Likes
+                            </button>
+                        </div>
+                    `;
+                    
+                    postsContainer.appendChild(postElement);
+                });
+            } catch (error) {
+                console.error('Error loading posts:', error);
+            }
+        }
+
+        // Like Post
+        async function likePost(postId, currentLikes) {
+            try {
+                await db.collection('posts').doc(postId).update({
+                    likes: currentLikes + 1;
+                });
+                loadPosts();
+            } catch (error) {
+                console.error('Error liking post:', error);
+            }
+        }
+
+        // Update UI based on auth state
+        function updateUI(user) {
+            const authSection = document.getElementById('authSection');
+            const appSection = document.getElementById('appSection');
+            const userGreeting = document.getElementById('userGreeting');
+            
+            if (user) {
+                authSection.classList.add('hidden');
+                appSection.classList.remove('hidden');
+                userGreeting.textContent = `Hello, ${user.displayName || user.email}`;
+                loadPosts();
+            } else {
+                authSection.classList.remove('hidden');
+                appSection.classList.add('hidden');
+            }
+        }
+
+        // Listen to auth state changes
+        auth.onAuthStateChanged((user) => {
+            updateUI(user);
+        });
+    </script>
+</body>
+      </html>
